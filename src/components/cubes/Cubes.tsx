@@ -99,9 +99,10 @@ export default function Cubes({
         }
       }
 
-      const stiffness = 140 * speed * speed;
-      const damping = 2 * (1 - 0.75 * bounce) * Math.sqrt(stiffness);
-      const influenceRadius = radius * cellSize;
+      const stiffness = 120 * speed * speed;
+      const damping = 2 * (1 - 0.7 * bounce) * Math.sqrt(stiffness);
+      // Wider influence radius so 5-7 rows and cols participate in the cloth funnel
+      const influenceRadius = Math.max(radius * cellSize * 1.8, cellSize * 5.5);
 
       let isMoving = false;
 
@@ -115,14 +116,15 @@ export default function Cubes({
           let target = 0;
           let targetSheen = 0;
 
-          // Pointer jelly indentation
+          // Pointer cloth indentation
           if (pointer.active) {
             const dist = Math.hypot(cx - pointer.x, cy - pointer.y);
             if (dist < influenceRadius) {
               const norm = dist / influenceRadius;
-              const press = Math.exp(-norm * norm * 3.5);
-              target = press * 12; // 12px elastic depression
-              targetSheen = press * 0.4;
+              // Smooth cosine/cubic falloff for natural cloth drape
+              const press = Math.cos(norm * (Math.PI / 2));
+              target = press * 24; // Deeper 24px cloth indentation
+              targetSheen = press * 0.5;
             }
           }
 
@@ -131,10 +133,10 @@ export default function Cubes({
             const rip = ripples[r];
             const dist = Math.hypot(cx - rip.x, cy - rip.y);
             const waveDiff = Math.abs(dist - rip.radius);
-            if (waveDiff < cellSize * 1.5) {
-              const wave = Math.cos((waveDiff / (cellSize * 1.5)) * Math.PI) * rip.strength;
-              target += wave * 8;
-              targetSheen = Math.max(targetSheen, rip.strength * 0.5);
+            if (waveDiff < cellSize * 2) {
+              const wave = Math.cos((waveDiff / (cellSize * 2)) * Math.PI) * rip.strength;
+              target += wave * 12;
+              targetSheen = Math.max(targetSheen, rip.strength * 0.6);
             }
           }
 
@@ -146,138 +148,108 @@ export default function Cubes({
           depth[idx] += velocity[idx] * dt;
           sheen[idx] += (targetSheen - sheen[idx]) * (1 - Math.exp(-dt * 8));
 
-          if (Math.abs(depth[idx] - targetDepth[idx]) > 0.1 || Math.abs(velocity[idx]) > 0.1) {
+          if (Math.abs(depth[idx] - targetDepth[idx]) > 0.05 || Math.abs(velocity[idx]) > 0.05) {
             isMoving = true;
           }
         }
       }
 
-      // 1. Draw solid continuous base slab
+      // 1. Draw solid background
       ctx.fillStyle = faceColor;
       ctx.globalAlpha = 1;
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Continuous resting graph incisions
-      ctx.strokeStyle = edgeColor;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.55;
-
-      ctx.beginPath();
-      for (let c = 0; c <= cols; c++) {
-        const x = c * cellSize;
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-      }
-      for (let r = 0; r <= rows; r++) {
-        const y = r * cellSize;
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-      }
-      ctx.stroke();
-
-      // 3. Render Interconnected 3D Cubes Sheet dipping inward like cloth
-      // When the cursor touches, the sheet dips down, pulling neighboring cubes inward together
+      // 2. Pre-calculate warped vertices for the continuous cloth surface
+      // Vertices are at (col * cellSize, row * cellSize)
+      // Each cube (col, row) is defined by its 4 corners
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           const idx = row * cols + col;
-          const d = depth[idx];
+          const d = Math.max(0, depth[idx]);
           const sh = sheen[idx];
-
-          if (d <= 0.08 && sh <= 0.01) continue;
 
           const cx = col * cellSize + cellSize / 2;
           const cy = row * cellSize + cellSize / 2;
           const x = col * cellSize;
           const y = row * cellSize;
 
-          // Vector pointing towards the center of depression (pointer)
+          if (d <= 0.05 && sh <= 0.01) {
+            // Resting cube: clean 1px stroke
+            ctx.strokeStyle = edgeColor;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 0.55;
+            ctx.strokeRect(x, y, cellSize, cellSize);
+            continue;
+          }
+
+          // Inward vector towards cursor (pulling cloth inward as it sinks)
           const dx = pointer.x - cx;
           const dy = pointer.y - cy;
           const dist = Math.hypot(dx, dy) || 1;
-          const nx = dx / dist;
-          const ny = dy / dist;
+          const pull = Math.min(cellSize * 0.35, (d / 24) * cellSize * 0.35);
+          const shiftX = (dx / dist) * pull;
+          const shiftY = (dy / dist) * pull;
 
-          // Cloth pull: cubes are pulled horizontally toward the depression center
-          const pullInward = Math.min(cellSize * 0.28, d * 0.45);
-          const shiftX = nx * pullInward;
-          const shiftY = ny * pullInward;
+          // Sinking depth creates funnel shadow
+          const sinkDepth = Math.min(18, d);
 
-          // Perspective depth: cubes sink down into the bottom
-          const sinkDepth = Math.min(14, d * 0.85);
-
-          // Cube top-face bounds after dipping and stretching along the cloth funnel
-          const margin = 0.75;
-          const topX = x + margin + shiftX;
-          const topY = y + margin + shiftY;
-          const topW = cellSize - margin * 2;
-          const topH = cellSize - margin * 2;
-
-          // 1. Ambient depth shadow in the valley of the cloth dip
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.07)';
-          ctx.globalAlpha = Math.min(0.65, (sinkDepth / 14) * 0.7);
+          // Deep valley ambient occlusion shadow inside the depression funnel
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
+          ctx.globalAlpha = Math.min(0.8, (sinkDepth / 24) * 0.85);
           ctx.fillRect(x, y, cellSize, cellSize);
 
-          // 2. Internal 3D bevel walls showing the tilt of the dipping cube faces
+          // Shifted top cube face
+          const gap = 1;
+          const topX = x + gap + shiftX;
+          const topY = y + gap + shiftY;
+          const topW = cellSize - gap * 2;
+          const topH = cellSize - gap * 2;
+
+          // 3D Extrusion bevel wall towards the rim (visible slope of the dip)
           if (sinkDepth > 0.5) {
-            ctx.fillStyle = '#eaeaea';
-            ctx.globalAlpha = Math.min(0.9, (sinkDepth / 14));
-            
-            // Draw facet sloping into the depression
+            ctx.fillStyle = '#dcdcdc';
+            ctx.globalAlpha = Math.min(0.9, (sinkDepth / 24) * 1.1);
+
+            // Slope facet opposite to the pull
             ctx.beginPath();
-            if (shiftX > 0.2) {
-              // Left wall exposed
-              ctx.moveTo(x + margin, y + margin);
-              ctx.lineTo(topX, topY);
-              ctx.lineTo(topX, topY + topH);
-              ctx.lineTo(x + margin, y + cellSize - margin);
-              ctx.closePath();
-              ctx.fill();
-            } else if (shiftX < -0.2) {
-              // Right wall exposed
-              ctx.moveTo(x + cellSize - margin, y + margin);
-              ctx.lineTo(topX + topW, topY);
-              ctx.lineTo(topX + topW, topY + topH);
-              ctx.lineTo(x + cellSize - margin, y + cellSize - margin);
+            if (Math.abs(shiftX) > 0.3) {
+              const startX = shiftX > 0 ? x : x + cellSize;
+              const edgeX = shiftX > 0 ? topX : topX + topW;
+              ctx.moveTo(startX, y);
+              ctx.lineTo(edgeX, topY);
+              ctx.lineTo(edgeX, topY + topH);
+              ctx.lineTo(startX, y + cellSize);
               ctx.closePath();
               ctx.fill();
             }
-
-            if (shiftY > 0.2) {
-              // Top wall exposed
-              ctx.moveTo(x + margin, y + margin);
-              ctx.lineTo(topX, topY);
-              ctx.lineTo(topX + topW, topY);
-              ctx.lineTo(x + cellSize - margin, y + margin);
-              ctx.closePath();
-              ctx.fill();
-            } else if (shiftY < -0.2) {
-              // Bottom wall exposed
-              ctx.moveTo(x + margin, y + cellSize - margin);
-              ctx.lineTo(topX, topY + topH);
-              ctx.lineTo(topX + topW, topY + topH);
-              ctx.lineTo(x + cellSize - margin, y + cellSize - margin);
+            if (Math.abs(shiftY) > 0.3) {
+              const startY = shiftY > 0 ? y : y + cellSize;
+              const edgeY = shiftY > 0 ? topY : topY + topH;
+              ctx.moveTo(x, startY);
+              ctx.lineTo(topX, edgeY);
+              ctx.lineTo(topX + topW, edgeY);
+              ctx.lineTo(x + cellSize, startY);
               ctx.closePath();
               ctx.fill();
             }
           }
 
-          // 3. Top face of the cube
+          // Top cube face
           ctx.fillStyle = faceColor;
           ctx.globalAlpha = 1;
           ctx.fillRect(topX, topY, topW, topH);
 
-          // Soft highlight on the rim of the cube
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          // Top rim highlight catching direct overhead light
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fillRect(topX, topY, topW, 1);
+
+          // Cube edge outline (clearly visible clean monochrome border)
+          ctx.strokeStyle = '#cccccc';
           ctx.lineWidth = 1;
+          ctx.globalAlpha = Math.min(0.95, 0.55 + (sinkDepth / 24) * 0.4);
           ctx.strokeRect(topX, topY, topW, topH);
 
-          // 4. Subtle perimeter line defining the cube's contour
-          ctx.strokeStyle = edgeColor;
-          ctx.lineWidth = 1;
-          ctx.globalAlpha = Math.min(0.8, 0.5 + (sinkDepth / 14) * 0.3);
-          ctx.strokeRect(topX, topY, topW, topH);
-
-          // Sheen / light deflection along the cloth wave
+          // Sheen wave reflection
           if (sh > 0.02) {
             ctx.fillStyle = rippleColor;
             ctx.globalAlpha = Math.min(0.4, sh * 0.5);
