@@ -183,56 +183,72 @@ export default function Cubes({
           const x = col * cellSize;
           const y = row * cellSize;
 
-          // Sliced gap/inset: cube edges separate revealing deep cut incisions
-          const cutGap = Math.min(cellSize * 0.35, d * 0.32);
-          const drawX = x + cutGap;
-          const drawY = y + cutGap;
+          // Sliced separation gap and 3D lift
+          const lift = Math.min(18, d * 0.9);
+          const cutGap = Math.min(cellSize * 0.28, d * 0.35);
+          
+          // Cube top-face shifts slightly up and left (natural light from top-left)
+          const offsetX = -lift * 0.25;
+          const offsetY = -lift * 0.45;
+          
+          const drawX = x + cutGap + offsetX;
+          const drawY = y + cutGap + offsetY;
           const drawW = cellSize - cutGap * 2;
           const drawH = cellSize - cutGap * 2;
 
           if (drawW <= 1 || drawH <= 1) continue;
 
-          // Incision depth gap (darker cut crease behind the sliced cube)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-          ctx.globalAlpha = Math.min(0.6, d * 0.06);
+          // 1. Dark incision floor / crease left behind as cube lifts
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.12)';
+          ctx.globalAlpha = Math.min(0.7, d * 0.08);
           ctx.fillRect(x, y, cellSize, cellSize);
 
-          // 3D Side/Bevel facet (simulating the cut slice depth)
-          const bevel = cutGap * 0.5;
-          ctx.fillStyle = 'rgba(210, 218, 228, 0.9)';
-          ctx.globalAlpha = Math.min(1, d * 0.12);
+          // 2. Realistic directional cast shadow beneath the elevated cube
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.14)';
+          ctx.globalAlpha = Math.min(0.5, lift * 0.04);
+          ctx.fillRect(drawX + lift * 0.3, drawY + lift * 0.5, drawW, drawH);
+
+          // 3. 3D Bottom facet (extrusion depth)
+          ctx.fillStyle = '#cbd5e1';
+          ctx.globalAlpha = 1;
           ctx.beginPath();
           ctx.moveTo(drawX, drawY + drawH);
-          ctx.lineTo(drawX + bevel, drawY + drawH + bevel);
-          ctx.lineTo(drawX + drawW + bevel, drawY + drawH + bevel);
+          ctx.lineTo(drawX - offsetX, drawY + drawH - offsetY);
+          ctx.lineTo(drawX + drawW - offsetX, drawY + drawH - offsetY);
           ctx.lineTo(drawX + drawW, drawY + drawH);
           ctx.closePath();
           ctx.fill();
 
+          // 4. 3D Right facet (extrusion depth)
+          ctx.fillStyle = '#e2e8f0';
           ctx.beginPath();
           ctx.moveTo(drawX + drawW, drawY);
-          ctx.lineTo(drawX + drawW + bevel, drawY + bevel);
-          ctx.lineTo(drawX + drawW + bevel, drawY + drawH + bevel);
+          ctx.lineTo(drawX + drawW - offsetX, drawY - offsetY);
+          ctx.lineTo(drawX + drawW - offsetX, drawY + drawH - offsetY);
           ctx.lineTo(drawX + drawW, drawY + drawH);
           ctx.closePath();
           ctx.fill();
 
-          // Sliced Cube Face
+          // 5. 3D Top face of the cube
           ctx.fillStyle = faceColor;
           ctx.globalAlpha = 1;
           ctx.fillRect(drawX, drawY, drawW, drawH);
 
-          // Sheen / light reflection on sliced cube face
+          // Top face edge highlight (light from above)
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.fillRect(drawX, drawY, drawW, 1.5);
+
+          // Sheen / ripple wave reflection
           if (sh > 0.02) {
             ctx.fillStyle = rippleColor;
-            ctx.globalAlpha = Math.min(0.8, sh * 0.85);
+            ctx.globalAlpha = Math.min(0.6, sh * 0.7);
             ctx.fillRect(drawX, drawY, drawW, drawH);
           }
 
-          // Crisp perimeter cut outline on the individual sliced cube
+          // Crisp 3D cube top perimeter stroke
           ctx.strokeStyle = edgeColor;
-          ctx.lineWidth = 1.2;
-          ctx.globalAlpha = Math.min(0.9, 0.5 + d * 0.05);
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = 0.8;
           ctx.strokeRect(drawX, drawY, drawW, drawH);
         }
       }
@@ -287,18 +303,18 @@ export default function Cubes({
     });
 
     resizeObserver.observe(container);
-    container.addEventListener('pointermove', onPointerMove, { passive: true });
-    container.addEventListener('pointerleave', onPointerLeave);
-    container.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    document.addEventListener('pointerleave', onPointerLeave);
+    window.addEventListener('pointerdown', onPointerDown);
 
     wake();
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
       resizeObserver.disconnect();
-      container.removeEventListener('pointermove', onPointerMove);
-      container.removeEventListener('pointerleave', onPointerLeave);
-      container.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerleave', onPointerLeave);
+      window.removeEventListener('pointerdown', onPointerDown);
     };
   }, [gridSize, faceColor, edgeColor, faceOpacity, radius, speed, bounce, rippleOnClick, rippleColor]);
 
