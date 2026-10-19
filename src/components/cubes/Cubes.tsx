@@ -152,12 +152,12 @@ export default function Cubes({
         }
       }
 
-      // 1. Draw solid continuous surface of the slab
+      // 1. Draw solid continuous base slab
       ctx.fillStyle = faceColor;
       ctx.globalAlpha = 1;
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Draw resting surface cut lines (razor-thin incisions scored into the surface)
+      // 2. Continuous resting graph incisions
       ctx.strokeStyle = edgeColor;
       ctx.lineWidth = 1;
       ctx.globalAlpha = 0.55;
@@ -175,49 +175,113 @@ export default function Cubes({
       }
       ctx.stroke();
 
-      // 3. Render surface incision yawning & clay depression ONLY in deformed areas
+      // 3. Render Interconnected 3D Cubes Sheet dipping inward like cloth
+      // When the cursor touches, the sheet dips down, pulling neighboring cubes inward together
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           const idx = row * cols + col;
           const d = depth[idx];
           const sh = sheen[idx];
 
-          if (d <= 0.05 && sh <= 0.01) continue;
+          if (d <= 0.08 && sh <= 0.01) continue;
 
+          const cx = col * cellSize + cellSize / 2;
+          const cy = row * cellSize + cellSize / 2;
           const x = col * cellSize;
           const y = row * cellSize;
 
-          // Incision seam yawning: cuts open slightly at the crease as the slab dents
-          // Keep it strictly at the surface level (max 2.5px yawn)
-          const yawn = Math.min(2.5, d * 0.22);
+          // Vector pointing towards the center of depression (pointer)
+          const dx = pointer.x - cx;
+          const dy = pointer.y - cy;
+          const dist = Math.hypot(dx, dy) || 1;
+          const nx = dx / dist;
+          const ny = dy / dist;
 
-          // Subtle depression shading on the clay surface around the dent
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.025)';
-          ctx.globalAlpha = Math.min(0.5, d * 0.05);
+          // Cloth pull: cubes are pulled horizontally toward the depression center
+          const pullInward = Math.min(cellSize * 0.28, d * 0.45);
+          const shiftX = nx * pullInward;
+          const shiftY = ny * pullInward;
+
+          // Perspective depth: cubes sink down into the bottom
+          const sinkDepth = Math.min(14, d * 0.85);
+
+          // Cube top-face bounds after dipping and stretching along the cloth funnel
+          const margin = 0.75;
+          const topX = x + margin + shiftX;
+          const topY = y + margin + shiftY;
+          const topW = cellSize - margin * 2;
+          const topH = cellSize - margin * 2;
+
+          // 1. Ambient depth shadow in the valley of the cloth dip
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.07)';
+          ctx.globalAlpha = Math.min(0.65, (sinkDepth / 14) * 0.7);
           ctx.fillRect(x, y, cellSize, cellSize);
 
-          // Scored cut crease shadows (the inner V-groove shadow of the slice)
-          if (yawn > 0.2) {
-            // Horizontal cut shadow crease
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.07)';
-            ctx.globalAlpha = Math.min(0.7, d * 0.08);
-            ctx.fillRect(x, y - yawn * 0.5, cellSize, yawn);
+          // 2. Internal 3D bevel walls showing the tilt of the dipping cube faces
+          if (sinkDepth > 0.5) {
+            ctx.fillStyle = '#eaeaea';
+            ctx.globalAlpha = Math.min(0.9, (sinkDepth / 14));
+            
+            // Draw facet sloping into the depression
+            ctx.beginPath();
+            if (shiftX > 0.2) {
+              // Left wall exposed
+              ctx.moveTo(x + margin, y + margin);
+              ctx.lineTo(topX, topY);
+              ctx.lineTo(topX, topY + topH);
+              ctx.lineTo(x + margin, y + cellSize - margin);
+              ctx.closePath();
+              ctx.fill();
+            } else if (shiftX < -0.2) {
+              // Right wall exposed
+              ctx.moveTo(x + cellSize - margin, y + margin);
+              ctx.lineTo(topX + topW, topY);
+              ctx.lineTo(topX + topW, topY + topH);
+              ctx.lineTo(x + cellSize - margin, y + cellSize - margin);
+              ctx.closePath();
+              ctx.fill();
+            }
 
-            // Vertical cut shadow crease
-            ctx.fillRect(x - yawn * 0.5, y, yawn, cellSize);
-
-            // Soft highlight on the opposite lip of the cut (light catching the edge of the slice)
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-            ctx.globalAlpha = Math.min(0.8, d * 0.08);
-            ctx.fillRect(x + yawn * 0.5, y + yawn * 0.5, cellSize - yawn, 1);
-            ctx.fillRect(x + yawn * 0.5, y + yawn * 0.5, 1, cellSize - yawn);
+            if (shiftY > 0.2) {
+              // Top wall exposed
+              ctx.moveTo(x + margin, y + margin);
+              ctx.lineTo(topX, topY);
+              ctx.lineTo(topX + topW, topY);
+              ctx.lineTo(x + cellSize - margin, y + margin);
+              ctx.closePath();
+              ctx.fill();
+            } else if (shiftY < -0.2) {
+              // Bottom wall exposed
+              ctx.moveTo(x + margin, y + cellSize - margin);
+              ctx.lineTo(topX, topY + topH);
+              ctx.lineTo(topX + topW, topY + topH);
+              ctx.lineTo(x + cellSize - margin, y + cellSize - margin);
+              ctx.closePath();
+              ctx.fill();
+            }
           }
 
-          // Subtle tactile sheen / deflection highlight
+          // 3. Top face of the cube
+          ctx.fillStyle = faceColor;
+          ctx.globalAlpha = 1;
+          ctx.fillRect(topX, topY, topW, topH);
+
+          // Soft highlight on the rim of the cube
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(topX, topY, topW, topH);
+
+          // 4. Subtle perimeter line defining the cube's contour
+          ctx.strokeStyle = edgeColor;
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = Math.min(0.8, 0.5 + (sinkDepth / 14) * 0.3);
+          ctx.strokeRect(topX, topY, topW, topH);
+
+          // Sheen / light deflection along the cloth wave
           if (sh > 0.02) {
             ctx.fillStyle = rippleColor;
             ctx.globalAlpha = Math.min(0.4, sh * 0.5);
-            ctx.fillRect(x + yawn, y + yawn, cellSize - yawn * 2, cellSize - yawn * 2);
+            ctx.fillRect(topX, topY, topW, topH);
           }
         }
       }
