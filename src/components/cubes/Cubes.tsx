@@ -152,10 +152,15 @@ export default function Cubes({
         }
       }
 
-      // 1. Draw continuous clean ambient grid everywhere
+      // 1. Draw solid continuous surface of the slab
+      ctx.fillStyle = faceColor;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. Draw resting surface cut lines (razor-thin incisions scored into the surface)
       ctx.strokeStyle = edgeColor;
       ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.5;
+      ctx.globalAlpha = 0.55;
 
       ctx.beginPath();
       for (let c = 0; c <= cols; c++) {
@@ -170,86 +175,50 @@ export default function Cubes({
       }
       ctx.stroke();
 
-      // 2. Render sliced-cube pop & incision ONLY in the active/displaced areas
+      // 3. Render surface incision yawning & clay depression ONLY in deformed areas
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           const idx = row * cols + col;
           const d = depth[idx];
           const sh = sheen[idx];
 
-          // If this cell is not disturbed, it remains part of the continuous resting grid
           if (d <= 0.05 && sh <= 0.01) continue;
 
           const x = col * cellSize;
           const y = row * cellSize;
 
-          // Sliced separation gap and 3D lift
-          const lift = Math.min(18, d * 0.9);
-          const cutGap = Math.min(cellSize * 0.28, d * 0.35);
-          
-          // Cube top-face shifts slightly up and left (natural light from top-left)
-          const offsetX = -lift * 0.25;
-          const offsetY = -lift * 0.45;
-          
-          const drawX = x + cutGap + offsetX;
-          const drawY = y + cutGap + offsetY;
-          const drawW = cellSize - cutGap * 2;
-          const drawH = cellSize - cutGap * 2;
+          // Incision seam yawning: cuts open slightly at the crease as the slab dents
+          // Keep it strictly at the surface level (max 2.5px yawn)
+          const yawn = Math.min(2.5, d * 0.22);
 
-          if (drawW <= 1 || drawH <= 1) continue;
-
-          // 1. Pure neutral crease left behind as cube lifts
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-          ctx.globalAlpha = Math.min(0.6, d * 0.07);
+          // Subtle depression shading on the clay surface around the dent
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.025)';
+          ctx.globalAlpha = Math.min(0.5, d * 0.05);
           ctx.fillRect(x, y, cellSize, cellSize);
 
-          // 2. Pure neutral cast shadow beneath the elevated cube
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-          ctx.globalAlpha = Math.min(0.45, lift * 0.035);
-          ctx.fillRect(drawX + lift * 0.3, drawY + lift * 0.5, drawW, drawH);
+          // Scored cut crease shadows (the inner V-groove shadow of the slice)
+          if (yawn > 0.2) {
+            // Horizontal cut shadow crease
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.07)';
+            ctx.globalAlpha = Math.min(0.7, d * 0.08);
+            ctx.fillRect(x, y - yawn * 0.5, cellSize, yawn);
 
-          // 3. 3D Bottom facet (pure neutral gray extrusion)
-          ctx.fillStyle = '#d4d4d4';
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          ctx.moveTo(drawX, drawY + drawH);
-          ctx.lineTo(drawX - offsetX, drawY + drawH - offsetY);
-          ctx.lineTo(drawX + drawW - offsetX, drawY + drawH - offsetY);
-          ctx.lineTo(drawX + drawW, drawY + drawH);
-          ctx.closePath();
-          ctx.fill();
+            // Vertical cut shadow crease
+            ctx.fillRect(x - yawn * 0.5, y, yawn, cellSize);
 
-          // 4. 3D Right facet (pure neutral lighter gray extrusion)
-          ctx.fillStyle = '#eaeaea';
-          ctx.beginPath();
-          ctx.moveTo(drawX + drawW, drawY);
-          ctx.lineTo(drawX + drawW - offsetX, drawY - offsetY);
-          ctx.lineTo(drawX + drawW - offsetX, drawY + drawH - offsetY);
-          ctx.lineTo(drawX + drawW, drawY + drawH);
-          ctx.closePath();
-          ctx.fill();
-
-          // 5. 3D Top face of the cube (pure white)
-          ctx.fillStyle = faceColor;
-          ctx.globalAlpha = 1;
-          ctx.fillRect(drawX, drawY, drawW, drawH);
-
-          // Top face edge highlight (pure white highlight)
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.fillRect(drawX, drawY, drawW, 1);
-
-          // Sheen / ripple wave reflection
-          if (sh > 0.02) {
-            ctx.fillStyle = rippleColor;
-            ctx.globalAlpha = Math.min(0.6, sh * 0.7);
-            ctx.fillRect(drawX, drawY, drawW, drawH);
+            // Soft highlight on the opposite lip of the cut (light catching the edge of the slice)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.globalAlpha = Math.min(0.8, d * 0.08);
+            ctx.fillRect(x + yawn * 0.5, y + yawn * 0.5, cellSize - yawn, 1);
+            ctx.fillRect(x + yawn * 0.5, y + yawn * 0.5, 1, cellSize - yawn);
           }
 
-          // Crisp 3D cube top perimeter stroke
-          ctx.strokeStyle = edgeColor;
-          ctx.lineWidth = 1;
-          ctx.globalAlpha = 0.8;
-          ctx.strokeRect(drawX, drawY, drawW, drawH);
+          // Subtle tactile sheen / deflection highlight
+          if (sh > 0.02) {
+            ctx.fillStyle = rippleColor;
+            ctx.globalAlpha = Math.min(0.4, sh * 0.5);
+            ctx.fillRect(x + yawn, y + yawn, cellSize - yawn * 2, cellSize - yawn * 2);
+          }
         }
       }
 
