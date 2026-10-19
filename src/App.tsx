@@ -16,14 +16,14 @@ export function App() {
       <div className="relative min-h-svh bg-background text-foreground antialiased">
         <Cubes
           gridSize={32}
-          faceColor="#f8f9fa"
-          edgeColor="#e2e7ec"
-          faceOpacity={0.95}
+          faceColor="#ffffff"
+          edgeColor="#e5e5e5"
+          faceOpacity={1}
           radius={4}
           speed={1.2}
           bounce={0.5}
           rippleOnClick={true}
-          rippleColor="#e0e6ed"
+          rippleColor="#f0f0f0"
           className="fixed inset-0 z-0"
         />
         <Header />
