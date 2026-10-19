@@ -152,47 +152,88 @@ export default function Cubes({
         }
       }
 
-      // Render continuous cut jelly slab
+      // 1. Draw continuous clean ambient grid everywhere
+      ctx.strokeStyle = edgeColor;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.5;
+
+      ctx.beginPath();
+      for (let c = 0; c <= cols; c++) {
+        const x = c * cellSize;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+      }
+      for (let r = 0; r <= rows; r++) {
+        const y = r * cellSize;
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+      }
+      ctx.stroke();
+
+      // 2. Render sliced-cube pop & incision ONLY in the active/displaced areas
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           const idx = row * cols + col;
-          const x = col * cellSize;
-          const y = row * cellSize;
           const d = depth[idx];
           const sh = sheen[idx];
 
-          // Top face slightly shifted down by indentation to create subtle 3D jelly squish
-          const squish = Math.max(0, d);
-          const topInset = squish * 0.18;
+          // If this cell is not disturbed, it remains part of the continuous resting grid
+          if (d <= 0.05 && sh <= 0.01) continue;
 
-          ctx.fillStyle = faceColor;
-          ctx.globalAlpha = faceOpacity;
-          ctx.fillRect(x + topInset, y + topInset, cellSize - topInset * 2, cellSize - topInset * 2);
+          const x = col * cellSize;
+          const y = row * cellSize;
 
-          // Subtle shadow when indented
-          if (squish > 0.5) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
-            ctx.fillRect(x, y, cellSize, topInset);
-          }
+          // Sliced gap/inset: cube edges separate revealing deep cut incisions
+          const cutGap = Math.min(cellSize * 0.35, d * 0.32);
+          const drawX = x + cutGap;
+          const drawY = y + cutGap;
+          const drawW = cellSize - cutGap * 2;
+          const drawH = cellSize - cutGap * 2;
 
-          // Sheen highlight
-          if (sh > 0.01) {
-            ctx.fillStyle = rippleColor;
-            ctx.globalAlpha = sh * 0.6;
-            ctx.fillRect(x, y, cellSize, cellSize);
-          }
+          if (drawW <= 1 || drawH <= 1) continue;
 
-          // Clean single 1px graph cut lines - subtle ambient feel
-          ctx.strokeStyle = edgeColor;
-          ctx.lineWidth = 1;
-          ctx.globalAlpha = 0.55;
+          // Incision depth gap (darker cut crease behind the sliced cube)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+          ctx.globalAlpha = Math.min(0.6, d * 0.06);
+          ctx.fillRect(x, y, cellSize, cellSize);
+
+          // 3D Side/Bevel facet (simulating the cut slice depth)
+          const bevel = cutGap * 0.5;
+          ctx.fillStyle = 'rgba(210, 218, 228, 0.9)';
+          ctx.globalAlpha = Math.min(1, d * 0.12);
+          ctx.beginPath();
+          ctx.moveTo(drawX, drawY + drawH);
+          ctx.lineTo(drawX + bevel, drawY + drawH + bevel);
+          ctx.lineTo(drawX + drawW + bevel, drawY + drawH + bevel);
+          ctx.lineTo(drawX + drawW, drawY + drawH);
+          ctx.closePath();
+          ctx.fill();
 
           ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x + cellSize, y);
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y + cellSize);
-          ctx.stroke();
+          ctx.moveTo(drawX + drawW, drawY);
+          ctx.lineTo(drawX + drawW + bevel, drawY + bevel);
+          ctx.lineTo(drawX + drawW + bevel, drawY + drawH + bevel);
+          ctx.lineTo(drawX + drawW, drawY + drawH);
+          ctx.closePath();
+          ctx.fill();
+
+          // Sliced Cube Face
+          ctx.fillStyle = faceColor;
+          ctx.globalAlpha = 1;
+          ctx.fillRect(drawX, drawY, drawW, drawH);
+
+          // Sheen / light reflection on sliced cube face
+          if (sh > 0.02) {
+            ctx.fillStyle = rippleColor;
+            ctx.globalAlpha = Math.min(0.8, sh * 0.85);
+            ctx.fillRect(drawX, drawY, drawW, drawH);
+          }
+
+          // Crisp perimeter cut outline on the individual sliced cube
+          ctx.strokeStyle = edgeColor;
+          ctx.lineWidth = 1.2;
+          ctx.globalAlpha = Math.min(0.9, 0.5 + d * 0.05);
+          ctx.strokeRect(drawX, drawY, drawW, drawH);
         }
       }
 
